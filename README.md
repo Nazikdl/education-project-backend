@@ -27,25 +27,25 @@
     </td>
     <td align="center" width="33%">
       <img src="./Public/screenshot/2.jpg" alt="Swagger 2" /><br/>
-      <sub>احراز هویت</sub>
+      <sub>  امار و گزارش ها</sub>
     </td>
     <td align="center" width="33%">
       <img src="./Public/screenshot/3.jpg" alt="Swagger 3" /><br/>
-      <sub>مدیریت دوره‌ها</sub>
+      <sub>مدیریت سفارش ها</sub>
     </td>
   </tr>
   <tr>
     <td align="center" width="33%">
       <img src="./Public/screenshot/4.jpg" alt="Swagger 4" /><br/>
-      <sub>سبد خرید و سفارش</sub>
+      <sub> مدیریت دوره ها</sub>
     </td>
     <td align="center" width="33%">
       <img src="./Public/screenshot/5.jpg" alt="Swagger 5" /><br/>
-      <sub>کد تخفیف</sub>
+      <sub>  نظرات کاربران</sub>
     </td>
     <td align="center" width="33%">
       <img src="./Public/screenshot/6.jpg" alt="Swagger 6" /><br/>
-      <sub>گزارش‌ها و آمار</sub>
+      <sub>احراز هویت و سبد خرید</sub>
     </td>
   </tr>
   <tr>
