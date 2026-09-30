@@ -19,12 +19,16 @@
     "cors": "^2.8.6",
     "dotenv": "^18.0.4",
     "express": "^5.2.1",
+    "express-validator": "^7.3.2",
     "init": "^0.1.2",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.10.2",
     "morgan": "^1.12.1",
     "multer": "^2.4.0",
     "nodemon": "^3.1.14",
+    "slugify": "^1.6.9",
+    "swagger-jsdoc": "^6.3.0",
+    "swagger-ui-express": "^5.0.1",
     "vanta-api": "^1.5.2"
   }
 }
