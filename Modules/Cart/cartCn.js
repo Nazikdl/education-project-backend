@@ -1,141 +1,169 @@
-import ApiFeatures, { catchAsync, HandleERROR } from "vanta-api";
+import { catchAsync, HandleERROR } from "vanta-api";
 import Cart from "./cartMd.js";
 import Course from "../Course/courseMd.js";
+import User from "../User/userMd.js";
 
-export const updateCart = async (userId) => {
-  const cart = await Cart.findOne({ userId }).populate({
-    path: "item.courseId",
-  });
-  cart.items = cart.items.filter((item) => {
-    if (item.cartQuantity > item.productVariantId.quantity) {
-      item.cartQuantity = item.productVariantId.quantity;
-      if (item.cartQuantity == 0) {
-        return false;
-      }
-    }
-    return item;
-  });
-  //اگه دوره ناموجود بود
+// ==================== HELPER: UPDATE CART ====================
+const updateCart = async (userId) => {
+  let cart = await Cart.findOne({ userId }).populate("items");
+
+  if (!cart) {
+    cart = await Cart.create({ userId, items: [] });
+  }
+
+  // ✅ حذف دوره‌های حذف‌شده یا ناموجود
+  cart.items = cart.items.filter((course) => course && course.inStock);
+
+  // ✅ محاسبه مجدد قیمت‌ها
   let totalPrice = 0;
   let finalPrice = 0;
-  for (let item of cart.items) {
-    totalPrice += item.courseId.price * item.cartQuantity;
-    finalPrice += item.courseId.finalPrice * item.cartQuantity;
+
+  for (const course of cart.items) {
+    totalPrice += course.price;
+    finalPrice += course.finalPrice;
   }
-  cart.finalPrice = finalPrice;
+
   cart.totalPrice = totalPrice;
+  cart.finalPrice = finalPrice;
+  cart.totalDiscount = totalPrice - finalPrice;
+  cart.cartQuantity = cart.items.length;
+
   await cart.save();
+
+  return await cart.populate({
+    path: "items",
+    select: "title image price finalPrice discountPercent slug inStock",
+  });
 };
+
+// ==================== GET CART ====================
 export const getOne = catchAsync(async (req, res, next) => {
-  await updateCart(req.userId);
-  const feature = new ApiFeatures(Cart, req.query, req.role)
-    .addManualFilters({ userId: req.userId })
-    .filter()
-    .sort()
-    .limitFields()
-    .paginate()
-    .populate([
-      {
-        path: "items",
-        populate: [
-          { path: "courseId", select: "images title slug" },
-          { path: "lessonIds", populate: { path: "title image" } },
-          { path: "categoryIds", select: "image title" },
-        ],
-      },
-    ]);
-  const result = await feature.execute();
-  return res.status(200).json(result);
+  const cart = await updateCart(req.userId);
+
+  return res.status(200).json({
+    success: true,
+    data: {
+      ...cart.toObject(),
+      isEmpty: cart.items.length === 0,
+    },
+  });
 });
+
+// ==================== ADD ITEM ====================
+export const addItem = catchAsync(async (req, res, next) => {
+  const { userId } = req;
+  const { courseId } = req.body;
+
+  if (!courseId) {
+    return next(new HandleERROR("انتخاب دوره الزامی است", 400));
+  }
+
+  const course = await Course.findById(courseId);
+  if (!course) {
+    return next(new HandleERROR("دوره یافت نشد", 404));
+  }
+
+  if (!course.inStock) {
+    return next(new HandleERROR("این دوره ناموجود است", 400));
+  }
+
+  if (!course.isPublished || course.status !== "approved") {
+    return next(new HandleERROR("این دوره قابل خریداری نیست", 400));
+  }
+
+  const user = await User.findById(userId).select("boughtCourseIds");
+  const alreadyBought = user.boughtCourseIds
+    .map(String)
+    .includes(courseId.toString());
+
+  if (alreadyBought) {
+    return next(new HandleERROR("شما قبلاً این دوره را خریده‌اید", 400));
+  }
+
+  let cart = await Cart.findOne({ userId });
+  if (!cart) {
+    cart = await Cart.create({ userId, items: [] });
+  }
+
+  const isExist = cart.items.map(String).includes(courseId.toString());
+
+  if (isExist) {
+    return next(new HandleERROR("این دوره قبلاً در سبد خرید شماست", 400));
+  }
+
+  cart.items.push(courseId);
+  await cart.save();
+
+  const updatedCart = await updateCart(userId);
+
+  return res.status(200).json({
+    success: true,
+    data: {
+      ...updatedCart.toObject(),
+      isEmpty: updatedCart.items.length === 0,
+    },
+    message: "دوره با موفقیت به سبد خرید اضافه شد",
+  });
+});
+
+// ==================== REMOVE ITEM ====================
+export const remove = catchAsync(async (req, res, next) => {
+  const { userId } = req;
+  const { courseId } = req.body;
+
+  if (!courseId) {
+    return next(new HandleERROR("انتخاب دوره الزامی است", 400));
+  }
+
+  const cart = await Cart.findOne({ userId });
+  if (!cart) {
+    return next(new HandleERROR("سبد خرید یافت نشد", 404));
+  }
+
+  const isExist = cart.items.map(String).includes(courseId.toString());
+  if (!isExist) {
+    return next(new HandleERROR("این دوره در سبد خرید شما نیست", 404));
+  }
+
+  cart.items = cart.items.filter(
+    (item) => item.toString() !== courseId.toString()
+  );
+  await cart.save();
+
+  const updatedCart = await updateCart(userId);
+
+  return res.status(200).json({
+    success: true,
+    data: {
+      ...updatedCart.toObject(),
+      isEmpty: updatedCart.items.length === 0,
+    },
+    message: "دوره با موفقیت از سبد خرید حذف شد",
+  });
+});
+
+// ==================== CLEAR CART ====================
 export const clearCart = catchAsync(async (req, res, next) => {
   const { userId } = req;
+
   const cart = await Cart.findOne({ userId });
+  if (!cart) {
+    return next(new HandleERROR("سبد خرید یافت نشد", 404));
+  }
+
   cart.items = [];
   cart.totalPrice = 0;
   cart.finalPrice = 0;
-  const newCart = await cart.save();
-  return res.status(200).json({
-    success: true,
-    data: newCart,
-    message: "سبد خرید شما پاک شد",
-  });
-});
-export const remove = catchAsync(async (req, res, next) => {
-  const { userId } = req;
-  const cart = await Cart.findOne({ userId }).populate({
-    path: "items.courseId",
-  });
-  const { totalRemove = false, courseId = null } = req.body;
-  if (!courseId) {
-    return next(new HandleERROR("انتخاب دوره الزامی است", 400));
-  }
-  cart.items = cart.items.filter((item) => {
-    if (item.courseId.toString() == courseId.toString()) {
-      cart.totalPrice -= item.courseId.price;
-      cart.finalPrice -= item.courseId.finalPrice;
-      item.cartQuantity--;
-      if (totalRemove || item.cartQuantity == 0) {
-        return false;
-      }
-    }
-    return item;
-  });
-  const newCart = await cart.save();
-  return res.status(200).json({
-    success: true,
-    data: newCart,
-    message: "ایتم با موفقیت از سبد خرید شما حذف شد",
-  });
-});
-export const addItem = catchAsync(async (req, res, next) => {
-  const { userId } = req;
-  const cart = await Cart.findOne({ userId }).populate({
-    path: "items.courseId",
-  });
-  const { courseId = null } = req.body;
-  if (!courseId) {
-    return next(new HandleERROR("انتخاب دوره الزامی است", 400));
-  }
-  let isExist = false;
-  let error = false;
-  cart.items = cart.items.map((item) => {
-    if (item.courseId._id.toString() == courseId.toString()) {
-      isExist = true;
-      cart.totalPrice += item.courseId.price;
-      cart.finalPrice += item.courseId.finalPrice;
-      item.cartQuantity++;
-      if (item.cartQuantity > item.courseId.quantity) {
-        error = true;
-      }
-    }
-    return item;
-  });
-  const course = await Course.findById(courseId).populate({ path: "courseId" });
-  if (error || course.quantity == 0) {
-    return next(
-      new HandleERROR(`max quantity of this item is ${course.quantity}`, 400),
-    );
-  }
-  if (!isExist) {
-    cart.items.push({
-      courseId,
-      lessonId: course.lessonIds._id,
-      categoryIds: course.categoryIds,
-      cartQuantity: 1,
-    });
-    cart.finalPrice += course.finalPrice;
-    cart.totalPrice += course.price;
-  }
+  cart.totalDiscount = 0;
+  cart.cartQuantity = 0;
+  await cart.save();
 
-  const newCart = await cart.save();
-  await newCart.populate([
-    { path: "courseId", select: "image title slug" },
-    { path: "lessonIds", select: "title image" },
-    { path: "categoryIds", select: "image title" },
-  ]);
   return res.status(200).json({
     success: true,
-    data: newCart,
-    message: "ایتم با موفقیت به سبد خرید اضافه شد",
+    data: {
+      ...cart.toObject(),
+      isEmpty: true,
+    },
+    message: "سبد خرید شما پاک شد",
   });
 });
