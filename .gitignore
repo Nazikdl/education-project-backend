@@ -1,7 +1,16 @@
 node_modules/
 .env
 .env.*
+!.env.example
 *.log
 dist/
 build/
 security-config.js
+Public/*
+!Public/.gitkeep
+!Public/screenshot/
+!Public/screenshot/**
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

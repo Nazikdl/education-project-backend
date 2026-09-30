@@ -93,7 +93,6 @@ const discountCodeSchema = new mongoose.Schema(
 );
 
 discountCodeSchema.index({ isPublished: 1, expireTime: -1 });
-discountCodeSchema.index({ code: 1 });
 
 const DiscountCode = mongoose.model("DiscountCode", discountCodeSchema);
 export default DiscountCode;

@@ -1,3 +1,8 @@
+import ApiFeatures, { catchAsync, HandleERROR } from "vanta-api";
+import Course from "../Course/courseMd.js";
+import Category from "../Category/categoryMd.js";
+import Lesson from "../Lesson/lessonMd.js";
+
 export const search = catchAsync(async (req, res, next) => {
   const isAdmin = req.role === "admin" || req.role === "superAdmin";
 

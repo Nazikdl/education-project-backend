@@ -20,6 +20,8 @@ import { swaggerSpec } from "./Utils/Swagger.js";
 import swaggerUi from "swagger-ui-express";
 import courseRouter from "./Modules/Course/course.js";
 import lessonRouter from "./Modules/Lesson/lesson.js";
+import reportRouter from "./Modules/Report/report.js";
+import orderRouter from "./Modules/Order/order.js";
 
 const __filename = fileURLToPath(import.meta.url);
 export const __dirname = path.dirname(__filename);
@@ -41,6 +43,8 @@ app.use("/api/search", searchRouter);
 app.use('/api/lessons',lessonRouter)
 app.use("/api/discount-code", discountCodeRouter);
 app.use("/api/cart", isLogin, cartRouter);
+app.use("/api/reports",reportRouter)
+app.use("/api/orders", isLogin, orderRouter);
 
 app.use(catchError);
 export default app;
