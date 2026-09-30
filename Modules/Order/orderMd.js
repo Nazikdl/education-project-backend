@@ -1,113 +1,88 @@
 import mongoose from "mongoose";
-import DiscountCode from "../DiscountCode/discountMd.js";
-const generateOrderCode = async (OD) => {
-  let isUnique = false;
-  let newCode = "";
-  let order = await OD.model
-    .findOne()
+import DiscountCode from "../DiscountCode/discountCodeMd.js";
+
+const generateOrderCode = async () => {
+  const year = new Date().getFullYear();
+  const prefix = `ORD-${year}-`;
+
+  const lastOrder = await mongoose
+    .model("Order")
+    .findOne({ orderCode: { $regex: `^${prefix}` } })
     .sort({ createdAt: -1 })
     .select("orderCode");
 
-  while (!isUnique) {
-    if (order) {
-      const oldCode = order.orderCode.split("-");
-      const year = new Date().getFullYear();
-      if (oldCode[1] != year) {
-        newCode = `ORD-${year}-000000001`;
-      } else {
-        const number = oldCode[2];
-        const newNumber = parseInt(number) + 1;
-        newCode = `ORD-${year}-${newNumber.toString().padStart(9, "0")}`;
-      }
-    } else {
-      const year = new Date().getFullYear();
-      newCode = `ORD-${year}-000000001`;
-    }
-
-    const existingCode = await OD.model.findOne({ orderCode: newCode });
-    if (existingCode) {
-      order = existingCode;
-    } else {
-      isUnique = true;
-    }
+  let newNumber = 1;
+  if (lastOrder) {
+    const parts = lastOrder.orderCode.split("-");
+    newNumber = parseInt(parts[2]) + 1;
   }
 
-  return newCode;
+  return `${prefix}${newNumber.toString().padStart(9, "0")}`;
 };
 
 const calculateOrderPrices = async (order) => {
   let totalPrice = 0;
   let finalPrice = 0;
+
   const items = order.items || [];
-  for (let item of items) {
-    const price = item.productVariantId.price || 0;
-    const final = item.productVariantId.finalPrice || 0;
-    const qty = item.cartQuantity || 1;
-    totalPrice += price * qty;
-    finalPrice += final * qty;
+  for (const item of items) {
+    totalPrice += item.price || 0;
+    finalPrice += item.finalPrice || 0;
   }
+
   order.totalPrice = +totalPrice.toFixed(2);
   order.finalPrice = +finalPrice.toFixed(2);
   order.finalPriceAfterDiscount = order.finalPrice;
-  order.freeShipping = false;
+
   if (order.discountCodeId) {
     const discountCode = await DiscountCode.findById(order.discountCodeId);
-    if (!discountCode) return;
-    if (discountCode.type == "fixed") {
-      order.finalPriceAfterDiscount -= discountCode.value;
-    } else {
-      order.finalPriceAfterDiscount = +(
-        order.finalPriceAfterDiscount *
-        (1 - discountCode.value)
-      ).toFixed(2);
+    if (discountCode) {
+      if (discountCode.type === "fixed") {
+        order.finalPriceAfterDiscount -= discountCode.value;
+      } else {
+        order.finalPriceAfterDiscount = +(
+          order.finalPriceAfterDiscount *
+          (1 - discountCode.value / 100)
+        ).toFixed(2);
+      }
+
+      order.finalPriceAfterDiscount = Math.max(
+        0,
+        order.finalPriceAfterDiscount
+      );
     }
-    order.freeShipping = discountCode.freeShipping;
   }
 };
-const stockIssueItemsSchema = new mongoose.Schema(
-  {
-    productVariantId: {
-      type: Object,
-      required: [true, "product variant is required"],
-    },
-    cartQuantity: {
-      type: Number,
-      required: [true, "cart quantity is required"],
-    },
-    sufficientQuantity: {
-      type: Number,
-      required: [true, "sufficient quantity is required"],
-    },
-  },
-  { _id: false },
-);
+
 const itemSchema = new mongoose.Schema(
   {
-    productVariantId: {
-      type: Object,
-      required: [true, "product variant is required"],
-    },
-    productId: {
+    courseId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Product",
-      required: [true, "product is required"],
+      ref: "Course",
+      required: [true, "دوره الزامی است"],
     },
-    cartQuantity: {
+    title: {
+      type: String,
+      required: [true, "عنوان دوره الزامی است"],
+    },
+    image: {
+      type: String,
+      default: "",
+    },
+    price: {
       type: Number,
-      required: [true, "cart quantity is required"],
+      required: [true, "قیمت الزامی است"],
     },
-    brandId: {
+    finalPrice: {
+      type: Number,
+      required: [true, "قیمت نهایی الزامی است"],
+    },
+    instructorId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Brand",
-      required: [true, "brand is required"],
-    },
-    categoryIds: {
-      type: [mongoose.Schema.Types.ObjectId],
-      ref: "Category",
-      required: [true, "category is required"],
+      ref: "User",
     },
   },
-  { _id: false },
+  { _id: false }
 );
 
 const orderSchema = new mongoose.Schema(
@@ -115,45 +90,37 @@ const orderSchema = new mongoose.Schema(
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      required: [true, "کاربر الزامی است"],
     },
     orderCode: {
       type: String,
       unique: true,
     },
+    items: {
+      type: [itemSchema],
+      default: [],
+    },
     totalPrice: {
       type: Number,
+      default: 0,
     },
     finalPrice: {
       type: Number,
+      default: 0,
     },
     finalPriceAfterDiscount: {
       type: Number,
-    },
-    freeShipping: {
-      type: Boolean,
-      default: false,
+      default: 0,
     },
     discountCodeId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "DiscountCode",
-    },
-    address: {
-      type: Object,
-      required: [true, "address is required"],
+      default: null,
     },
     status: {
       type: String,
-      enum: ["pending", "success", "failed", "stockIssue"],
+      enum: ["pending", "success", "failed", "canceled"],
       default: "pending",
-    },
-    stockIssueItems: {
-      type: [stockIssueItemsSchema],
-      default: [],
-    },
-    items: {
-      type: [itemSchema],
-      default: [],
     },
     authority: {
       type: String,
@@ -163,49 +130,45 @@ const orderSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
-    cashBackPrice: {
-      type: Number,
-      default: 0,
+    paymentDate: {
+      type: Date,
+      default: null,
     },
   },
-  {
-    timestamps: true,
-  },
+  { timestamps: true }
 );
 
-orderSchema.pre("validate", async function (next) {
-  try {
-    this.orderCode = await generateOrderCode(this);
-    await calculateOrderPrices(this);
-  } catch (error) {
-    return next(error);
+orderSchema.pre("save", async function () {
+  if (this.isNew && !this.orderCode) {
+    this.orderCode = await generateOrderCode();
   }
-  next();
+  await calculateOrderPrices(this);
 });
-orderSchema.pre("findOneAndUpdate", async function (next) {
-  try {
-    const update = this.getUpdate();
-    const updateData = update.$set || update;
-    const currentOrder = await this.model.findOne(this.getQuery());
-    if (!currentOrder) {
-      return next(new Error("order not found"));
-    }
-    const order = {
-      items: updateData.items || currentOrder.items,
-      discountCodeId: updateData.discountCodeId || currentOrder.discountCodeId,
-    };
-    await calculateOrderPrices(order);
-    this.set({
-      totalPrice: order.totalPrice,
-      finalPrice: order.finalPrice,
-      finalPriceAfterDiscount: order.finalPriceAfterDiscount,
-      freeShipping: order.freeShipping,
-    });
-    next();
-  } catch (err) {
-    return next(err);
-  }
-});
-const Order = mongoose.model("Order", orderSchema);
 
+orderSchema.pre("findOneAndUpdate", async function () {
+  const update = this.getUpdate();
+  const updateData = update.$set || update;
+
+  const currentOrder = await this.model.findOne(this.getQuery());
+  if (!currentOrder) return;
+
+  const order = {
+    items: updateData.items || currentOrder.items,
+    discountCodeId: updateData.discountCodeId ?? currentOrder.discountCodeId,
+  };
+
+  await calculateOrderPrices(order);
+
+  this.set({
+    totalPrice: order.totalPrice,
+    finalPrice: order.finalPrice,
+    finalPriceAfterDiscount: order.finalPriceAfterDiscount,
+  });
+});
+
+orderSchema.index({ userId: 1, createdAt: -1 });
+orderSchema.index({ status: 1 });
+orderSchema.index({ authority: 1 });
+
+const Order = mongoose.model("Order", orderSchema);
 export default Order;

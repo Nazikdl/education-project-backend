@@ -32,6 +32,21 @@ const cartSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    discountCode: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "DiscountCode",
+      default: null,
+    },
+    discountValue: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    finalPriceAfterDiscount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
   },
   { timestamps: true }
 );

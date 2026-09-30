@@ -3,7 +3,6 @@ import Cart from "./cartMd.js";
 import Course from "../Course/courseMd.js";
 import User from "../User/userMd.js";
 
-// ==================== HELPER: UPDATE CART ====================
 const updateCart = async (userId) => {
   let cart = await Cart.findOne({ userId }).populate("items");
 
@@ -11,13 +10,10 @@ const updateCart = async (userId) => {
     cart = await Cart.create({ userId, items: [] });
   }
 
-  // ✅ حذف دوره‌های حذف‌شده یا ناموجود
   cart.items = cart.items.filter((course) => course && course.inStock);
 
-  // ✅ محاسبه مجدد قیمت‌ها
   let totalPrice = 0;
   let finalPrice = 0;
-
   for (const course of cart.items) {
     totalPrice += course.price;
     finalPrice += course.finalPrice;
@@ -28,6 +24,12 @@ const updateCart = async (userId) => {
   cart.totalDiscount = totalPrice - finalPrice;
   cart.cartQuantity = cart.items.length;
 
+  if (cart.discountCode && cart.discountValue > 0) {
+    cart.finalPriceAfterDiscount = Math.max(0, finalPrice - cart.discountValue);
+  } else {
+    cart.finalPriceAfterDiscount = finalPrice;
+  }
+
   await cart.save();
 
   return await cart.populate({
@@ -36,7 +38,6 @@ const updateCart = async (userId) => {
   });
 };
 
-// ==================== GET CART ====================
 export const getOne = catchAsync(async (req, res, next) => {
   const cart = await updateCart(req.userId);
 
@@ -49,7 +50,6 @@ export const getOne = catchAsync(async (req, res, next) => {
   });
 });
 
-// ==================== ADD ITEM ====================
 export const addItem = catchAsync(async (req, res, next) => {
   const { userId } = req;
   const { courseId } = req.body;
@@ -86,7 +86,6 @@ export const addItem = catchAsync(async (req, res, next) => {
   }
 
   const isExist = cart.items.map(String).includes(courseId.toString());
-
   if (isExist) {
     return next(new HandleERROR("این دوره قبلاً در سبد خرید شماست", 400));
   }
@@ -156,6 +155,9 @@ export const clearCart = catchAsync(async (req, res, next) => {
   cart.finalPrice = 0;
   cart.totalDiscount = 0;
   cart.cartQuantity = 0;
+  cart.discountCode = null;
+  cart.discountValue = 0;
+  cart.finalPriceAfterDiscount = 0;
   await cart.save();
 
   return res.status(200).json({

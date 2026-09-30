@@ -1,53 +1,90 @@
-import ApiFeatures, { catchAsync, HandleERROR } from "vanta-api";
-import Category from "../Category/categoryMd.js";
-import Course from "../Course/courseMd.js";
-import Lesson from "../Lesson/lessonMd.js";
-
 export const search = catchAsync(async (req, res, next) => {
-  const condition = { isPublished: true };
-  const role = req.role || 'student';
+  const isAdmin = req.role === "admin" || req.role === "superAdmin";
 
-  const courseFeatures = new ApiFeatures(Course, req.query, role)
-    .addManualFilters(condition)
+  const courseCondition = isAdmin
+    ? {}
+    : { isPublished: true, status: "approved" };
+
+  const categoryCondition = isAdmin ? {} : { isPublished: true };
+  const lessonCondition = isAdmin ? {} : { isPublished: true };
+
+  const perPage = Math.min(parseInt(req.query.limit) || 10, 5);
+
+  const courseFeatures = new ApiFeatures(
+    Course,
+    { ...req.query, limit: perPage },
+    req.role
+  )
+    .addManualFilters(courseCondition)
     .filter()
     .sort()
-    .search(["title"])
+    .search(["title", "description", "tags"])
     .limitFields()
     .paginate()
     .populate([
-      { path: "instructorId", select: "fullName phoneNumber" },
+      { path: "instructorId", select: "fullName" },
       { path: "categoryIds", select: "title" },
-      { path: "lessonIds", select: "title duration isFree" },
-      { path: "prerequisites", select: "title image price slug" },
     ]);
-  const course = await courseFeatures.execute();
 
-  const categoriesFeatures = new ApiFeatures(Category, req.query, req.role)
-    .addManualFilters(condition)
-    .filter()
+  const courseResult = await courseFeatures.execute();
+
+  const categoriesFeatures = new ApiFeatures(
+    Category,
+    { ...req.query, limit: perPage },
+    req.role
+  )
+    .addManualFilters(categoryCondition)
     .search(["title"])
     .sort()
     .limitFields()
     .paginate()
-    .populate([{ path: "supCategoryId" }, { path: "subCategoryIds" }]);
-  const categories = await categoriesFeatures.execute();
-  const lessonFeatures = new ApiFeatures(Lesson, req.query, req.role)
-    .addManualFilters(condition)
-    .filter()
-    .search(["title"])
+    .populate([{ path: "supCategoryId", select: "title" }]);
+
+  const categoriesResult = await categoriesFeatures.execute();
+
+  const lessonFeatures = new ApiFeatures(
+    Lesson,
+    { ...req.query, limit: perPage },
+    req.role
+  )
+    .addManualFilters(lessonCondition)
+    .search(["title", "description"])
     .sort()
     .limitFields()
-    .paginate();
-  const lesson = await lessonFeatures.execute();
-  if (course.count == 0 && categories.count == 0 && lesson.count == 0) {
-    return next(new HandleERROR("نتیجه ای یافت نشد", 404));
+    .paginate()
+    .populate([{ path: "courseId", select: "title image slug" }]);
+
+  const lessonResult = await lessonFeatures.execute();
+
+  const courses = courseResult?.data || [];
+  const categories = categoriesResult?.data || [];
+  const lessons = lessonResult?.data || [];
+
+  const courseCount =
+    courseResult?.results || courseResult?.count || courses.length;
+  const categoryCount =
+    categoriesResult?.results || categoriesResult?.count || categories.length;
+  const lessonCount =
+    lessonResult?.results || lessonResult?.count || lessons.length;
+
+  const totalResults = courseCount + categoryCount + lessonCount;
+
+  if (totalResults === 0) {
+    return next(new HandleERROR("نتیجه‌ای یافت نشد", 404));
   }
+
   return res.status(200).json({
     success: true,
     data: {
-      course,
+      courses,
       categories,
-      lesson,
+      lessons,
+    },
+    results: {
+      courses: courseCount,
+      categories: categoryCount,
+      lessons: lessonCount,
+      total: totalResults,
     },
   });
 });

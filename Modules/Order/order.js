@@ -1,27 +1,35 @@
 import { Router } from "express";
-import { getAll, getOne, requestPayment, update, verify } from "./orderCn.js";
 import isLogin from "../../Middlewares/isLogin.js";
 import isAdmin from "../../Middlewares/isAdmin.js";
+
 import {
-  validateGetAll,
-  validateGetOne,
-  validateUpdate,
+  getAll,
+  getOne,
+  requestPayment,
+  update,
+  verify,
+} from "./orderCn.js";
+
+import {
+  validateGetAllOrders,
+  validateGetSingleOrder,
   validateRequestPayment,
-  validateVerify,
+  validateUpdateOrder,
+  validateVerifyPayment,
 } from "./orderValidator.js";
 
 const orderRouter = Router();
 
 orderRouter
   .route("/")
-  .get(isLogin, validateGetAll, getAll)
+  .get(isLogin, validateGetAllOrders, getAll)
   .post(isLogin, validateRequestPayment, requestPayment);
 
-orderRouter.route("/verify").post(validateVerify, verify);
+orderRouter.route("/verify").post(validateVerifyPayment, verify);
 
 orderRouter
   .route("/:id")
-  .get(isLogin, validateGetOne, getOne)
-  .patch(isAdmin, validateUpdate, update);
+  .get(isLogin, validateGetSingleOrder, getOne)
+  .patch(isLogin, isAdmin, validateUpdateOrder, update);
 
 export default orderRouter;

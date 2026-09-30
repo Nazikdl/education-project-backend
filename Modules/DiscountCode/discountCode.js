@@ -1,6 +1,7 @@
+import { Router } from "express";
 import isLogin from "../../Middlewares/isLogin.js";
 import isAdmin from "../../Middlewares/isAdmin.js";
-import { Router } from "express";
+
 import {
   checkDiscountCode,
   create,
@@ -9,42 +10,31 @@ import {
   remove,
   update,
 } from "./discountCodeCn.js";
+
 import {
-  validateDiscountCodeCreate,
-  validateDiscountCodeUpdate,
-  validateDiscountCodeGet,
-  validateDiscountCodeDelete,
-  validateDiscountCodeCheck,
-  validateDiscountCodeExists,
-  validateCanDelete,
+  validateGetAllCodes,
+  validateGetSingleCode,
+  validateCreateCode,
+  validateUpdateCode,
+  validateRemoveCode,
+  validateCheckCode,
 } from "./discountCodeValidator.js";
 
 const discountCodeRouter = Router();
 
 discountCodeRouter
   .route("/")
-  .get(isAdmin, validateDiscountCodeGet, getAll)
-  .post(isAdmin, validateDiscountCodeCreate, create);
+  .get(isLogin, isAdmin, validateGetAllCodes, getAll)
+  .post(isLogin, isAdmin, validateCreateCode, create);
 
 discountCodeRouter
   .route("/check")
-  .post(isLogin, validateDiscountCodeCheck, checkDiscountCode);
+  .post(isLogin, validateCheckCode, checkDiscountCode);
 
 discountCodeRouter
   .route("/:id")
-  .get(isAdmin, validateDiscountCodeGet, getOne)
-  .patch(
-    isAdmin,
-    validateDiscountCodeExists,
-    validateDiscountCodeUpdate,
-    update,
-  )
-  .delete(
-    isAdmin,
-    validateDiscountCodeExists,
-    validateCanDelete,
-    validateDiscountCodeDelete,
-    remove,
-  );
+  .get(isLogin, isAdmin, validateGetSingleCode, getOne)
+  .patch(isLogin, isAdmin, validateUpdateCode, update)
+  .delete(isLogin, isAdmin, validateRemoveCode, remove);
 
 export default discountCodeRouter;
